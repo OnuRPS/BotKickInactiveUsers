@@ -1,56 +1,103 @@
 from telethon import TelegramClient, events
+from telethon.tl.functions.messages import GetHistoryRequest
 from telethon.tl.functions.channels import EditBannedRequest
 from telethon.tl.types import ChatBannedRights
-import datetime
-import asyncio
 import os
+import asyncio
 
-# Debugging: Afișează variabilele de mediu în logs (pentru verificare)
-print("🔍 Checking environment variables...")
-print("API_ID:", os.getenv("API_ID"))
-print("API_HASH:", os.getenv("API_HASH"))
-print("BOT_TOKEN:", os.getenv("BOT_TOKEN"))
-print("GROUP_ID:", os.getenv("GROUP_ID"))
-
-# Citim datele din variabilele de mediu
-API_ID = os.getenv("API_ID")
+# ✅ Environment variables from Railway
+API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-GROUP_ID = os.getenv("GROUP_ID")
+GROUP_ID = int(os.getenv("GROUP_ID"))
 
-# Verificăm dacă variabilele de mediu sunt setate corect
-if not all([API_ID, API_HASH, BOT_TOKEN, GROUP_ID]):
-    raise ValueError("❌ ERROR: One or more environment variables are missing! Check Railway settings.")
-
-API_ID = int(API_ID)
-GROUP_ID = int(GROUP_ID)
-
-# Inițializăm clientul Telegram
+# ✅ Initialize the Telegram Client
 client = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
-async def kick_inactive_users():
-    async for user in client.iter_participants(GROUP_ID):
-        if user.bot or user.deleted:
-            continue  # Nu dăm kick la boți sau conturi șterse
+async def has_ever_written(user_id):
+    """ Check if the user has ever written a message in the group. """
+    try:
+        history = await client(GetHistoryRequest(
+            peer=GROUP_ID,
+            limit=1000,  # Check the last 1000 messages
+            offset_date=None,
+            offset_id=0,
+            max_id=0,
+            min_id=0,
+            add_offset=0,
+            hash=0
+        ))
 
-        last_seen = getattr(user.status, 'was_online', None)
-        if last_seen:
-            days_inactive = (datetime.datetime.utcnow() - last_seen).days
-            if days_inactive >= 3:
-                try:
-                    await client(EditBannedRequest(
-                        GROUP_ID, user.id, ChatBannedRights(until_date=None, view_messages=True)
-                    ))
-                    print(f"✅ Kicked user {user.id} for inactivity")
-                    await asyncio.sleep(1)  # Pauză pentru a evita rate-limit
-                except Exception as e:
-                    print(f"⚠️ Error kicking user {user.id}: {e}")
+        for message in history.messages:
+            if message.sender_id == user_id:
+                return True  # ✅ User has written at least one message
+
+    except Exception as e:
+        print(f"⚠️ Error checking messages for user {user_id}: {e}")
+    
+    return False  # ❌ User has never written anything
+
+async def warn_and_check_user(user):
+    """ Send a warning message and wait 5 minutes before kicking the user if they don’t write anything. """
+    try:
+        message = (
+            "Hello! I am **PandaKicker**, a bot that removes users who have never written in the PandaBao group. "
+            "You are detected as a potential infiltrated bot. If you are a real user, please write a message in the group. "
+            "Otherwise, you will be removed in **5 minutes**."
+        )
+        await client.send_message(user.id, message)
+        print(f"📩 Sent warning to {user.id}")
+
+        await asyncio.sleep(300)  # ⏳ Wait 5 minutes
+
+        # Check again if user wrote something
+        if not await has_ever_written(user.id):
+            try:
+                await client(EditBannedRequest(
+                    GROUP_ID,
+                    user.id,
+                    ChatBannedRights(until_date=None, view_messages=True)  # Kick user
+                ))
+                print(f"✅ Kicked user {user.id} for never writing in the group.")
+            except Exception as e:
+                print(f"⚠️ Error kicking user {user.id}: {e}")
+
+    except Exception as e:
+        print(f"⚠️ Could not send message to {user.id}. They may have private messages disabled.")
+
+async def kick_non_writers():
+    """ Check all users and warn/kick those who never wrote in the group. """
+    print("🔍 Checking for users who never wrote anything...")
+
+    async for user in client.iter_participants(GROUP_ID):
+        if user.deleted:
+            # ❌ Immediately kick deleted accounts
+            try:
+                await client(EditBannedRequest(
+                    GROUP_ID,
+                    user.id,
+                    ChatBannedRights(until_date=None, view_messages=True)
+                ))
+                print(f"🗑️ Removed deleted account: {user.id}")
+                continue  # Skip to the next user
+            except Exception as e:
+                print(f"⚠️ Error removing deleted account {user.id}: {e}")
+                continue
+
+        if user.bot or (user.username and user.username.lower().endswith("_bot")):
+            continue  # ✅ Ignore trusted bots (e.g., Rose_bot)
+
+        if not await has_ever_written(user.id):
+            await warn_and_check_user(user)  # Send warning and check again after 5 minutes
 
 async def main():
-    while True:
-        print("🔄 Checking for inactive users...")
-        await kick_inactive_users()
-        await asyncio.sleep(86400)  # Rulează la fiecare 24 de ore
+    print("🛠️ PandaKicker is running! Cleaning users for 7 days...")
+    for day in range(7):  # ✅ Run for 7 days
+        print(f"🗑️ Cleaning day {day + 1}/7...")
+        await kick_non_writers()
+        await asyncio.sleep(86400)  # Wait 24 hours before the next check
+
+    print("✅ PandaKicker has completed 7 days of cleaning. Stopping process.")
 
 with client:
     client.loop.run_until_complete(main())

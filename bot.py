@@ -39,7 +39,7 @@ async def track_new_users(event):
                     print(f"❌ Kicked user {user_id} for inactivity.")
                     del user_activity[user_id]  # Remove from tracking
                 except Exception as e:
-                    print(f"⚠️ Error kicking user {user_id}: {e}")
+                    print(f"⚠️ Error while kicking user {user_id}: {e}")
 
 @client.on(events.NewMessage(chats=GROUP_ID))
 async def track_messages(event):

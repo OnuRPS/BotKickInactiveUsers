@@ -1,5 +1,5 @@
 from telethon import TelegramClient, events
-from telethon.tl.functions.channels import EditBannedRequest
+from telethon.tl.functions.channels import EditBannedRequest, GetFullChannelRequest
 from telethon.tl.types import ChatBannedRights
 import os
 import asyncio
@@ -16,6 +16,15 @@ client = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOK
 # ✅ Dictionary to track users who joined but didn't write anything
 user_activity = {}
 
+async def get_group_entity():
+    """ Retrieve the full entity of the group to prevent PeerChannel errors """
+    try:
+        group_entity = await client(GetFullChannelRequest(GROUP_ID))
+        return group_entity
+    except Exception as e:
+        print(f"⚠️ Error fetching group entity: {e}")
+        return None
+
 @client.on(events.ChatAction)
 async def track_new_users(event):
     """ Track when new users join the group """
@@ -26,18 +35,20 @@ async def track_new_users(event):
             user_activity[user_id] = asyncio.get_event_loop().time()  # Save the join time
             
             # Wait 5 minutes (for testing, in production it will be 3 days)
-            await asyncio.sleep(60)
+            await asyncio.sleep(300)
 
             # If the user hasn't written anything, kick them
             if user_id in user_activity:
                 try:
-                    await client(EditBannedRequest(
-                        GROUP_ID,
-                        user_id,
-                        ChatBannedRights(until_date=None, view_messages=True)  # Kick user
-                    ))
-                    print(f"❌ Kicked user {user_id} for inactivity.")
-                    del user_activity[user_id]  # Remove from tracking
+                    group_entity = await get_group_entity()  # 🔥 FIX: Get full group entity
+                    if group_entity:
+                        await client(EditBannedRequest(
+                            group_entity.full_chat.id,
+                            user_id,
+                            ChatBannedRights(until_date=None, view_messages=True)  # Kick user
+                        ))
+                        print(f"❌ Kicked user {user_id} for inactivity.")
+                        del user_activity[user_id]  # Remove from tracking
                 except Exception as e:
                     print(f"⚠️ Error while kicking user {user_id}: {e}")
 

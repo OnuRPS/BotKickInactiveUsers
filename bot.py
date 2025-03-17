@@ -1,4 +1,4 @@
-from telethon import TelegramClient, events
+from telethon import TelegramClient
 from telethon.tl.functions.messages import GetHistoryRequest
 from telethon.tl.functions.channels import EditBannedRequest
 from telethon.tl.types import ChatBannedRights
@@ -19,7 +19,7 @@ async def has_ever_written(user_id):
     try:
         history = await client(GetHistoryRequest(
             peer=GROUP_ID,
-            limit=1000,  # Check the last 1000 messages
+            limit=500,  # Check the last 500 messages
             offset_date=None,
             offset_id=0,
             max_id=0,
@@ -89,15 +89,13 @@ async def kick_non_writers():
 
         if not await has_ever_written(user.id):
             await warn_and_check_user(user)  # Send warning and check again after 5 minutes
+        
+        await asyncio.sleep(1)  # ⏳ Avoid rate limiting (important for large groups)
 
 async def main():
-    print("🛠️ PandaKicker is running! Cleaning users for 7 days...")
-    for day in range(7):  # ✅ Run for 7 days
-        print(f"🗑️ Cleaning day {day + 1}/7...")
-        await kick_non_writers()
-        await asyncio.sleep(86400)  # Wait 24 hours before the next check
-
-    print("✅ PandaKicker has completed 7 days of cleaning. Stopping process.")
+    print("🛠️ PandaKicker is running! Performing full user check...")
+    await kick_non_writers()  # ✅ Perform full check
+    print("✅ PandaKicker has completed user verification. Stopping process.")
 
 with client:
     client.loop.run_until_complete(main())

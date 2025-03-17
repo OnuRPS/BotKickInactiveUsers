@@ -1,5 +1,5 @@
 from telethon import TelegramClient, events
-from telethon.tl.functions.channels import EditBannedRequest, GetFullChannelRequest
+from telethon.tl.functions.channels import EditBannedRequest
 from telethon.tl.types import ChatBannedRights
 import os
 import asyncio
@@ -17,9 +17,9 @@ client = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOK
 user_activity = {}
 
 async def get_group_entity():
-    """ Retrieve the full entity of the group to prevent PeerChannel errors """
+    """ Retrieve the group entity correctly """
     try:
-        group_entity = await client(GetFullChannelRequest(GROUP_ID))
+        group_entity = await client.get_entity(GROUP_ID)  # 🔥 FIX: Correct way to get group entity
         return group_entity
     except Exception as e:
         print(f"⚠️ Error fetching group entity: {e}")
@@ -35,15 +35,15 @@ async def track_new_users(event):
             user_activity[user_id] = asyncio.get_event_loop().time()  # Save the join time
             
             # Wait 5 minutes (for testing, in production it will be 3 days)
-            await asyncio.sleep(70)
+            await asyncio.sleep(300)
 
             # If the user hasn't written anything, kick them
             if user_id in user_activity:
                 try:
-                    group_entity = await get_group_entity()  # 🔥 FIX: Get full group entity
+                    group_entity = await get_group_entity()  # 🔥 FIX: Get group entity properly
                     if group_entity:
                         await client(EditBannedRequest(
-                            group_entity.full_chat.id,
+                            group_entity,
                             user_id,
                             ChatBannedRights(until_date=None, view_messages=True)  # Kick user
                         ))
@@ -62,6 +62,7 @@ async def track_messages(event):
 
 async def main():
     print("🛠️ PandaKicker is running! Monitoring new users...")
+    await client.get_entity(GROUP_ID)  # 🔥 FIX: Ensures bot can interact with the group
     await client.run_until_disconnected()
 
 with client:

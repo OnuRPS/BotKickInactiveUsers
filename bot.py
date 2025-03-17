@@ -39,7 +39,7 @@ async def track_new_users(event):
             user_activity[user_id] = asyncio.get_event_loop().time()  # Save the join time
             
             # Wait 5 minutes (for testing, in production it will be 3 days)
-            await asyncio.sleep(300)
+            await asyncio.sleep(30)
 
             # If the user hasn't written anything, kick them
             if user_id in user_activity:

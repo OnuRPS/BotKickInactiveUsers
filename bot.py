@@ -5,13 +5,14 @@ import datetime
 import asyncio
 import os
 
+# Debugging: Afișează variabilele de mediu în logs (pentru verificare)
 print("🔍 Checking environment variables...")
 print("API_ID:", os.getenv("API_ID"))
 print("API_HASH:", os.getenv("API_HASH"))
 print("BOT_TOKEN:", os.getenv("BOT_TOKEN"))
 print("GROUP_ID:", os.getenv("GROUP_ID"))
 
-# Citim datele din variabilele de mediu (setate pe Railway)
+# Citim datele din variabilele de mediu
 API_ID = os.getenv("API_ID")
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")

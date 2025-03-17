@@ -17,20 +17,28 @@ client = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOK
 async def has_ever_written(user_id):
     """ Check if the user has ever written a message in the group. """
     try:
-        history = await client(GetHistoryRequest(
-            peer=GROUP_ID,
-            limit=500,  # Check the last 500 messages
-            offset_date=None,
-            offset_id=0,
-            max_id=0,
-            min_id=0,
-            add_offset=0,
-            hash=0
-        ))
+        offset_id = 0
+        message_count = 0
+        while message_count < 10000:  # 🔹 Search up to 10,000 messages
+            history = await client(GetHistoryRequest(
+                peer=GROUP_ID,
+                limit=100,
+                offset_id=offset_id,
+                max_id=0,
+                min_id=0,
+                add_offset=0,
+                hash=0
+            ))
 
-        for message in history.messages:
-            if message.sender_id == user_id:
-                return True  # ✅ User has written at least one message
+            if not history.messages:
+                break  # 🔹 Stop if no more messages are found
+
+            for message in history.messages:
+                if message.sender_id == user_id:
+                    return True  # ✅ User has written at least one message
+
+            offset_id = history.messages[-1].id  # Move to older messages
+            message_count += len(history.messages)
 
     except Exception as e:
         print(f"⚠️ Error checking messages for user {user_id}: {e}")

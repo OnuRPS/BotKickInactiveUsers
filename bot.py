@@ -1,6 +1,6 @@
 from telethon import TelegramClient, events
-from telethon.tl.functions.channels import EditBannedRequest
-from telethon.tl.types import ChatBannedRights
+from telethon.tl.functions.channels import EditBannedRequest, GetParticipantsRequest
+from telethon.tl.types import ChatBannedRights, ChannelParticipantsSearch
 import os
 import asyncio
 
@@ -16,14 +16,26 @@ client = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOK
 # ✅ Dictionary to track users who joined but didn't write anything
 user_activity = {}
 
-async def get_group_entity():
-    """ Retrieve the group entity correctly """
+async def ensure_bot_has_access():
+    """ Forces bot to interact with the group before getting entity """
     try:
-        group_entity = await client.get_entity(GROUP_ID)  # 🔥 FIX: Correct way to get group entity
-        return group_entity
+        async for _ in client.iter_participants(GROUP_ID, search=""):
+            break  # If we can iterate, the bot has access
+        print("✅ Bot successfully accessed the group participants.")
     except Exception as e:
-        print(f"⚠️ Error fetching group entity: {e}")
-        return None
+        print(f"⚠️ Bot failed to access participants: {e}")
+
+async def kick_user(user_id):
+    """ Kick user with correct entity fetching """
+    try:
+        await client(EditBannedRequest(
+            GROUP_ID,
+            user_id,
+            ChatBannedRights(until_date=None, view_messages=True)  # Kick user
+        ))
+        print(f"❌ Kicked user {user_id} for inactivity.")
+    except Exception as e:
+        print(f"⚠️ Error while kicking user {user_id}: {e}")
 
 @client.on(events.ChatAction)
 async def track_new_users(event):
@@ -35,22 +47,12 @@ async def track_new_users(event):
             user_activity[user_id] = asyncio.get_event_loop().time()  # Save the join time
             
             # Wait 5 minutes (for testing, in production it will be 3 days)
-            await asyncio.sleep(300)
+            await asyncio.sleep(40)
 
             # If the user hasn't written anything, kick them
             if user_id in user_activity:
-                try:
-                    group_entity = await get_group_entity()  # 🔥 FIX: Get group entity properly
-                    if group_entity:
-                        await client(EditBannedRequest(
-                            group_entity,
-                            user_id,
-                            ChatBannedRights(until_date=None, view_messages=True)  # Kick user
-                        ))
-                        print(f"❌ Kicked user {user_id} for inactivity.")
-                        del user_activity[user_id]  # Remove from tracking
-                except Exception as e:
-                    print(f"⚠️ Error while kicking user {user_id}: {e}")
+                await kick_user(user_id)
+                del user_activity[user_id]  # Remove from tracking
 
 @client.on(events.NewMessage(chats=GROUP_ID))
 async def track_messages(event):
@@ -62,7 +64,7 @@ async def track_messages(event):
 
 async def main():
     print("🛠️ PandaKicker is running! Monitoring new users...")
-    await client.get_entity(GROUP_ID)  # 🔥 FIX: Ensures bot can interact with the group
+    await ensure_bot_has_access()  # 🔥 FIX: Ensure bot has proper access
     await client.run_until_disconnected()
 
 with client:
